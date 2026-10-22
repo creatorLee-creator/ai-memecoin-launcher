@@ -32,8 +32,9 @@ app.use(
   }),
 );
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Bound JSON and form bodies to reduce resource exhaustion from oversized requests.
+app.use(express.json({ limit: "32kb" }));
+app.use(express.urlencoded({ extended: true, limit: "32kb", parameterLimit: 100 }));
 
 app.use(
   clerkMiddleware((req) => ({
