@@ -31,6 +31,7 @@ import {
   pumpFunLaunchAdapter,
 } from "../lib/launcher/launch-engine";
 import { tokenGenerator } from "../lib/launcher/token-generator";
+import { authenticatedRateLimit } from "../middlewares/authenticatedRateLimit";
 
 const router: IRouter = Router();
 
@@ -135,7 +136,7 @@ router.get("/launcher/launches", async (req, res): Promise<void> => {
   );
 });
 
-router.post("/launcher/generate", async (req, res): Promise<void> => {
+router.post("/launcher/generate", authenticatedRateLimit("generate", 10), async (req, res): Promise<void> => {
   const parsed = GenerateDemoTokenBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -151,7 +152,7 @@ router.post("/launcher/generate", async (req, res): Promise<void> => {
   res.json(GenerateDemoTokenResponse.parse(generated));
 });
 
-router.post("/launcher/launches", async (req, res): Promise<void> => {
+router.post("/launcher/launches", authenticatedRateLimit("launch", 5), async (req, res): Promise<void> => {
   const parsed = CreateDemoLaunchBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
