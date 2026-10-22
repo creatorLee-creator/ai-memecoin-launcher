@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "AI Memecoin Launcher"
+description = "A private, mobile-first Solana token launch workspace for generating token concepts, reviewing launch details, and managing a demo-only launch queue with auditable safety controls."
+version = "1.0.0"
+id = "artifacts/ai-memecoin-launcher"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 26100
+
+[services.development]
+run = "pnpm --filter @workspace/ai-memecoin-launcher run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/ai-memecoin-launcher", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/ai-memecoin-launcher/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "26100"
+BASE_PATH = "/"
