@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: launcher
+    description: Authenticated demo token launch workspace operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,172 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /launcher/overview:
+    get:
+      operationId: getLauncherOverview
+      tags: [launcher]
+      summary: Get dashboard overview and wallet availability
+      responses:
+        "200":
+          description: Dashboard overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LauncherOverview"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /launcher/launches:
+    get:
+      operationId: listLauncherLaunches
+      tags: [launcher]
+      summary: List demo launch records
+      responses:
+        "200":
+          description: Launch history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LaunchRecord"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createDemoLaunch
+      tags: [launcher]
+      summary: Create a persistent demo-only launch record
+      description: Never creates a wallet, contract, signature, or blockchain transaction.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DemoLaunchInput"
+      responses:
+        "201":
+          description: Demo record created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LaunchRecord"
+        "400":
+          description: Invalid input or safety policy blocked the action
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /launcher/generate:
+    post:
+      operationId: generateDemoToken
+      tags: [launcher]
+      summary: Generate sample token metadata without an external AI service
+      description: Returns deterministic demo text and placeholder artwork; no third-party request is made.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TokenGenerationInput"
+      responses:
+        "200":
+          description: Sample token preview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeneratedToken"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /launcher/safety-settings:
+    get:
+      operationId: getSafetySettings
+      tags: [launcher]
+      summary: Read configurable demo spending limits and emergency stop
+      responses:
+        "200":
+          description: Safety settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SafetySettings"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateSafetySettings
+      tags: [launcher]
+      summary: Update spending limits or emergency stop
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SafetySettingsUpdate"
+      responses:
+        "200":
+          description: Updated safety settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SafetySettings"
+        "400":
+          description: Invalid safety limits
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /launcher/audit-log:
+    get:
+      operationId: listLauncherAuditEvents
+      tags: [launcher]
+      summary: List recent safety and demo activity
+      responses:
+        "200":
+          description: Recent audit events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AuditEvent"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +201,184 @@ components:
           type: string
       required:
         - status
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+    TokenGenerationInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 32
+        description:
+          type: string
+          maxLength: 280
+      required: [name]
+    GeneratedToken:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        ticker:
+          type: string
+        description:
+          type: string
+        artworkSeed:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+        generationMode:
+          type: string
+          enum: [demo]
+      required: [id, name, ticker, description, artworkSeed, generatedAt, generationMode]
+    DemoLaunchInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 32
+        ticker:
+          type: string
+          minLength: 1
+          maxLength: 10
+        description:
+          type: string
+          maxLength: 280
+        artworkSeed:
+          type: string
+          maxLength: 64
+      required: [name, ticker, description, artworkSeed]
+    LaunchRecord:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        ticker:
+          type: string
+        description:
+          type: string
+        artworkSeed:
+          type: string
+        contractAddress:
+          type: [string, "null"]
+        transactionSignature:
+          type: [string, "null"]
+        status:
+          type: string
+          enum: [demo_only]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - ticker
+        - description
+        - artworkSeed
+        - contractAddress
+        - transactionSignature
+        - status
+        - createdAt
+    SafetySettings:
+      type: object
+      properties:
+        maxPerLaunchSol:
+          type: number
+          minimum: 0
+          maximum: 100
+        dailyLimitSol:
+          type: number
+          minimum: 0
+          maximum: 500
+        dailyLaunchLimit:
+          type: integer
+          minimum: 0
+          maximum: 100
+        emergencyStop:
+          type: boolean
+        walletStatus:
+          type: string
+          enum: [not_created]
+        balanceSol:
+          type: number
+          enum: [0]
+        walletAddress:
+          type: [string, "null"]
+      required:
+        - maxPerLaunchSol
+        - dailyLimitSol
+        - dailyLaunchLimit
+        - emergencyStop
+        - walletStatus
+        - balanceSol
+        - walletAddress
+    SafetySettingsUpdate:
+      type: object
+      properties:
+        maxPerLaunchSol:
+          type: number
+          minimum: 0
+          maximum: 100
+        dailyLimitSol:
+          type: number
+          minimum: 0
+          maximum: 500
+        dailyLaunchLimit:
+          type: integer
+          minimum: 0
+          maximum: 100
+        emergencyStop:
+          type: boolean
+    LauncherOverview:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [demo]
+        totalLaunchRecords:
+          type: integer
+        launchesToday:
+          type: integer
+        walletStatus:
+          type: string
+          enum: [not_created]
+        balanceSol:
+          type: number
+          enum: [0]
+        emergencyStop:
+          type: boolean
+        pumpFunStatus:
+          type: string
+          enum: [not_configured]
+      required:
+        - mode
+        - totalLaunchRecords
+        - launchesToday
+        - walletStatus
+        - balanceSol
+        - emergencyStop
+        - pumpFunStatus
+    AuditEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        action:
+          type: string
+        detail:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, action, detail, createdAt]
 
