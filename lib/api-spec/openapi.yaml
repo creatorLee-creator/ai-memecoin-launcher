@@ -98,8 +98,8 @@ paths:
     post:
       operationId: generateDemoToken
       tags: [launcher]
-      summary: Generate sample token metadata without an external AI service
-      description: Returns deterministic demo text and placeholder artwork; no third-party request is made.
+      summary: Generate demo or AI-powered token metadata
+      description: Uses an AI provider when OPENAI_API_KEY is configured; otherwise generates a local demo concept. No token is deployed.
       requestBody:
         required: true
         content:
@@ -236,7 +236,7 @@ components:
           format: date-time
         generationMode:
           type: string
-          enum: [demo]
+          enum: [demo, openai]
       required: [id, name, ticker, description, artworkSeed, generatedAt, generationMode]
     DemoLaunchInput:
       type: object

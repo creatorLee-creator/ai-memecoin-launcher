@@ -143,13 +143,18 @@ router.post("/launcher/generate", authenticatedRateLimit("generate", 10), async 
     return;
   }
 
-  const generated = await tokenGenerator.generate(parsed.data);
-  await addAuditEvent(
-    userIdFor(req),
-    "demo_token_generated",
-    `Generated a sample concept for ${generated.name}.`,
-  );
-  res.json(GenerateDemoTokenResponse.parse(generated));
+  try {
+    const generated = await tokenGenerator.generate(parsed.data);
+    await addAuditEvent(
+      userIdFor(req),
+      "token_concept_generated",
+      `Generated a ${generated.generationMode} concept for ${generated.name}.`,
+    );
+    res.json(GenerateDemoTokenResponse.parse(generated));
+  } catch {
+    // Do not expose provider responses, API keys, or internal error details.
+    res.status(502).json({ error: "Token generation is temporarily unavailable." });
+  }
 });
 
 router.post("/launcher/launches", authenticatedRateLimit("launch", 5), async (req, res): Promise<void> => {

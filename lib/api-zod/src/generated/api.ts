@@ -104,7 +104,7 @@ export const GenerateDemoTokenResponse = zod.object({
   "description": zod.string(),
   "artworkSeed": zod.string(),
   "generatedAt": zod.coerce.date(),
-  "generationMode": zod.enum(['demo'])
+  "generationMode": zod.enum(['demo', 'openai'])
 })
 
 
