@@ -160,6 +160,9 @@ function Dashboard() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [token, setToken] = useState<GeneratedToken | null>(null);
+  const [artwork, setArtwork] = useState<string | null>(null);
+  const [artworkBusy, setArtworkBusy] = useState(false);
+  const [artworkError, setArtworkError] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const invalidateLaunchData = () => {
@@ -167,8 +170,29 @@ function Dashboard() {
     void cache.invalidateQueries({ queryKey: getListLauncherLaunchesQueryKey() });
     void cache.invalidateQueries({ queryKey: getListLauncherAuditEventsQueryKey() });
   };
+  const onArtwork = async () => {
+    if (!token || artworkBusy) return;
+    setArtworkBusy(true); setArtworkError('');
+    try {
+      const response = await fetch('/api/launcher/artwork', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: token.name, ticker: token.ticker, description: token.description }),
+      });
+      if (!response.ok) throw new Error('Artwork service unavailable');
+      const result: unknown = await response.json();
+      if (!result || typeof result !== 'object' ||
+          (result as { mimeType?: unknown }).mimeType !== 'image/png' ||
+          typeof (result as { base64?: unknown }).base64 !== 'string') {
+        throw new Error('Invalid artwork response');
+      }
+      setArtwork(`data:image/png;base64,${(result as { base64: string }).base64}`);
+    } catch {
+      setArtworkError('Could not generate artwork. Check your API credits and service configuration, then retry.');
+    } finally { setArtworkBusy(false); }
+  };
   const onGenerate = (event: FormEvent) => {
-    event.preventDefault(); setError(''); setNotice('');
+    event.preventDefault(); setError(''); setNotice(''); setArtwork(null); setArtworkError('');
     generate.mutate({ data: { name: name.trim(), description: description.trim() } }, {
       onSuccess: result => { setToken(result); setName(result.name); setDescription(result.description); },
       onError: () => setError('Could not generate sample metadata. Your draft has not been changed.'),
@@ -193,16 +217,16 @@ function Dashboard() {
       </>}
     </div>
     <div className="dashboard-grid">
-      <section className="card card-pad"><div className="card-head"><div><div className="eyebrow">Drafting / 01</div><h2 className="section-title" style={{ marginTop: 8 }}>Create a token concept</h2><p className="section-copy">Request deterministic sample copy and placeholder artwork metadata.</p></div><div className="brand-mark"><Sparkles size={16} /></div></div>
+      <section className="card card-pad"><div className="card-head"><div><div className="eyebrow">Drafting / 01</div><h2 className="section-title" style={{ marginTop: 8 }}>Create a token concept</h2><p className="section-copy">Generate token metadata, then optionally request original AI artwork.</p></div><div className="brand-mark"><Sparkles size={16} /></div></div>
         <form onSubmit={onGenerate}><div className="field"><label htmlFor="token-name">Concept name</label><input id="token-name" className="input" data-testid="input-token-name" required maxLength={32} placeholder="e.g. Moss Signal" value={name} onChange={e => setName(e.target.value)} /></div>
           <div className="field"><label htmlFor="token-description">Short description <span style={{ color: '#718178', fontWeight: 400 }}>· optional</span></label><textarea id="token-description" className="textarea" data-testid="input-token-description" maxLength={280} placeholder="What is the idea behind this token?" value={description} onChange={e => setDescription(e.target.value)} /><div className="field-hint">{description.length}/280 characters</div></div>
-          <div className="button-row"><button className="button button-primary" type="submit" disabled={generate.isPending || !name.trim()} data-testid="button-generate-token">{generate.isPending ? <RefreshCw size={14} className="spin" /> : <Sparkles size={14} />}{generate.isPending ? 'Preparing sample…' : 'Generate sample concept'}</button>{token && <button type="button" className="button button-secondary" onClick={() => { setToken(null); setNotice(''); setError(''); }} data-testid="button-clear-draft"><X size={14} />Clear draft</button>}</div>
+          <div className="button-row"><button className="button button-primary" type="submit" disabled={generate.isPending || !name.trim()} data-testid="button-generate-token">{generate.isPending ? <RefreshCw size={14} className="spin" /> : <Sparkles size={14} />}{generate.isPending ? 'Preparing sample…' : 'Generate sample concept'}</button>{token && <button type="button" className="button button-secondary" onClick={() => { setToken(null); setArtwork(null); setArtworkError(''); setNotice(''); setError(''); }} data-testid="button-clear-draft"><X size={14} />Clear draft</button>}</div>
         </form>
-        <div className="generation-note"><CircleHelp size={15} /><span><strong>Demo generation only.</strong> The endpoint returns deterministic sample metadata; no external AI service is called.</span></div>
+        <div className="generation-note"><CircleHelp size={15} /><span><strong>Concept-only mode.</strong> Token text may use OpenAI when configured. Artwork is optional and uses API credits. Nothing is launched on-chain.</span></div>
         {error && <div className="error-box" role="alert">{error}</div>}{notice && <div className="success-box" role="status">{notice}</div>}
       </section>
       <section className="card card-pad"><div className="card-head"><div><div className="eyebrow">Review / 02</div><h2 className="section-title" style={{ marginTop: 8 }}>Preview</h2><p className="section-copy">Review before saving your demo record.</p></div><span className="demo-badge">NOT LIVE</span></div>
-        {token ? <><div className="preview-art"><div className="art-mark">{token.ticker.slice(0, 2)}</div></div><div className="preview-meta"><div><div className="token-name" data-testid="text-preview-name">{token.name}</div><div className="token-ticker">${token.ticker}</div></div><span className="mono">SAMPLE</span></div><p className="token-description">{token.description}</p>
+        {token ? <><div className="preview-art">{artwork ? <img src={artwork} alt={`AI artwork for ${token.name}`} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 12 }} data-testid="image-token-artwork" /> : <div className="art-mark">{token.ticker.slice(0, 2)}</div>}</div><div className="button-row" style={{ marginTop: 12 }}><button type="button" className="button button-secondary" disabled={artworkBusy || generate.isPending} onClick={() => void onArtwork()} data-testid="button-generate-artwork">{artworkBusy ? "Generating artwork…" : artwork ? "Regenerate AI artwork" : "Generate AI artwork"}</button></div>{artworkError && <div className="error-box" role="alert">{artworkError}</div>}<div className="preview-meta"><div><div className="token-name" data-testid="text-preview-name">{token.name}</div><div className="token-ticker">${token.ticker}</div></div><span className="mono">SAMPLE</span></div><p className="token-description">{token.description}</p>
           <div className="button-row"><button className="button button-primary" onClick={onCreate} disabled={busy || overview.isLoading || overview.isError || !overview.data || overview.data.emergencyStop} data-testid="button-save-demo-launch">{createLaunch.isPending ? 'Saving record…' : overview.data?.emergencyStop ? 'Emergency stop active' : overview.isLoading ? 'Checking workspace…' : 'Save demo launch record'}<ArrowRight size={14} /></button></div>
           <div className="field-hint" style={{ marginTop: 10 }}>Saved records have no contract address and no transaction signature.</div>
         </> : <div className="empty-state"><div className="empty-icon"><Layers3 size={19} /></div><h3>Your review appears here</h3><p>Generate a sample concept to inspect its name, ticker, description, and placeholder artwork.</p></div>}
