@@ -31,6 +31,7 @@ import {
   pumpFunLaunchAdapter,
 } from "../lib/launcher/launch-engine";
 import { tokenGenerator } from "../lib/launcher/token-generator";
+import { generateTokenArtwork } from "../lib/launcher/artwork-generator";
 import { authenticatedRateLimit } from "../middlewares/authenticatedRateLimit";
 
 const router: IRouter = Router();
@@ -154,6 +155,34 @@ router.post("/launcher/generate", authenticatedRateLimit("generate", 10), async 
   } catch {
     // Do not expose provider responses, API keys, or internal error details.
     res.status(502).json({ error: "Token generation is temporarily unavailable." });
+  }
+});
+
+// Artwork is generated only for an authenticated concept preview. Never persisted
+// or passed to a blockchain adapter. Rate-limited separately from text generation.
+router.post("/launcher/artwork", authenticatedRateLimit("artwork", 3), async (req, res): Promise<void> => {
+  const body: unknown = req.body;
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    res.status(400).json({ error: "Invalid artwork request." });
+    return;
+  }
+  const input = body as Record<string, unknown>;
+  if (
+    typeof input.name !== "string" || input.name.length < 1 || input.name.length > 32 ||
+    typeof input.ticker !== "string" || !/^[A-Za-z0-9]{2,10}$/.test(input.ticker) ||
+    typeof input.description !== "string" || input.description.length > 280
+  ) {
+    res.status(400).json({ error: "Invalid artwork request." });
+    return;
+  }
+  try {
+    const artwork = await generateTokenArtwork({
+      name: input.name, ticker: input.ticker, description: input.description,
+    });
+    res.setHeader("Cache-Control", "no-store");
+    res.json(artwork);
+  } catch {
+    res.status(502).json({ error: "Artwork generation is temporarily unavailable." });
   }
 });
 
