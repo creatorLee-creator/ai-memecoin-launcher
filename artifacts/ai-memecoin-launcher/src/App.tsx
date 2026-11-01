@@ -15,7 +15,7 @@ import {
   getListLauncherAuditEventsQueryKey, getListLauncherLaunchesQueryKey,
   useCreateDemoLaunch, useGenerateDemoToken, useGetLauncherOverview, useGetSafetySettings,
   useHealthCheck, useListLauncherAuditEvents, useListLauncherLaunches, useUpdateSafetySettings,
-  type AuditEvent, type GeneratedToken, type LaunchRecord,
+  type AuditEvent, type GeneratedToken, type LaunchRecord, type SafetySettings,
 } from '@workspace/api-client-react';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
@@ -194,7 +194,7 @@ function Dashboard() {
   const onGenerate = (event: FormEvent) => {
     event.preventDefault(); setError(''); setNotice(''); setArtwork(null); setArtworkError('');
     generate.mutate({ data: { name: name.trim(), description: description.trim() } }, {
-      onSuccess: result => { setToken(result); setName(result.name); setDescription(result.description); },
+      onSuccess: (result: GeneratedToken) => { setToken(result); setName(result.name); setDescription(result.description); },
       onError: () => setError('Could not generate sample metadata. Your draft has not been changed.'),
     });
   };
@@ -247,11 +247,11 @@ function RecordItem({ record }: { record: LaunchRecord }) {
 function HistoryPage() {
   const records = useListLauncherLaunches({ query: { queryKey: getListLauncherLaunchesQueryKey() } });
   const [filter, setFilter] = useState('');
-  const visible = useMemo(() => (records.data ?? []).filter(record => `${record.name} ${record.ticker} ${record.description}`.toLowerCase().includes(filter.toLowerCase())), [records.data, filter]);
+  const visible = useMemo(() => (records.data ?? []).filter((record: LaunchRecord) => `${record.name} ${record.ticker} ${record.description}`.toLowerCase().includes(filter.toLowerCase())), [records.data, filter]);
   return <AppFrame active="/history"><div className="page"><div className="page-head"><div><div className="eyebrow">Persistent records / 02</div><h1 className="page-title">Launch history</h1><p className="page-subtitle">A durable record of demo-only concepts saved from this workspace.</p></div><span className="mode-chip"><FileClock size={13} />RECORDS ONLY</span></div>
     {records.isLoading ? <div className="stack"><LoadingCard /><LoadingCard /></div> : records.isError ? <div className="card card-pad"><QueryError retry={() => void records.refetch()} /></div> : <>
       <div className="card card-pad"><div className="card-head" style={{ alignItems: 'center' }}><div><div className="eyebrow">Archive</div><h2 className="section-title" style={{ marginTop: 7 }}>{records.data?.length ?? 0} saved {(records.data?.length ?? 0) === 1 ? 'record' : 'records'}</h2></div><label className="search-field"><Search size={15} /><input className="input" aria-label="Search records" data-testid="input-history-search" placeholder="Search concepts…" value={filter} onChange={e => setFilter(e.target.value)} /></label></div>
-        {visible.length > 0 ? <div className="record-list">{visible.map(record => <RecordItem key={record.id} record={record} />)}</div> : <div className="empty-state"><div className="empty-icon">{records.data?.length ? <Search size={18} /> : <History size={18} />}</div><h3>{records.data?.length ? 'No matching concepts' : 'Your archive is clear'}</h3><p>{records.data?.length ? 'Try a different name or ticker.' : 'When you save a demo launch record, it will be listed here for future review.'}</p>{filter && <button className="button button-quiet" style={{ marginTop: 14 }} onClick={() => setFilter('')} data-testid="button-clear-search">Clear search</button>}</div>}
+        {visible.length > 0 ? <div className="record-list">{visible.map((record: LaunchRecord) => <RecordItem key={record.id} record={record} />)}</div> : <div className="empty-state"><div className="empty-icon">{records.data?.length ? <Search size={18} /> : <History size={18} />}</div><h3>{records.data?.length ? 'No matching concepts' : 'Your archive is clear'}</h3><p>{records.data?.length ? 'Try a different name or ticker.' : 'When you save a demo launch record, it will be listed here for future review.'}</p>{filter && <button className="button button-quiet" style={{ marginTop: 14 }} onClick={() => setFilter('')} data-testid="button-clear-search">Clear search</button>}</div>}
       </div>
       <div className="notice" style={{ marginTop: 15 }}><strong>Record integrity.</strong> Contract address: Not created. Transaction signature: Not broadcast. These records do not represent on-chain launches.</div>
     </>}</div></AppFrame>;
@@ -282,11 +282,11 @@ function SafetyPage() {
     if (!Number.isFinite(payload.maxPerLaunchSol) || payload.maxPerLaunchSol < 0 || payload.maxPerLaunchSol > 100 || !Number.isFinite(payload.dailyLimitSol) || payload.dailyLimitSol < 0 || payload.dailyLimitSol > 500 || !Number.isInteger(payload.dailyLaunchLimit) || payload.dailyLaunchLimit < 0 || payload.dailyLaunchLimit > 100) {
       setSaveError('Use values within the displayed policy ranges. Launch count must be a whole number.'); return;
     }
-    update.mutate({ data: payload }, { onSuccess: result => { cache.setQueryData(getGetSafetySettingsQueryKey(), result); setSaveMessage('Safety policies saved. These values do not authorize spending.'); void cache.invalidateQueries({ queryKey: getListLauncherAuditEventsQueryKey() }); void cache.invalidateQueries({ queryKey: getGetLauncherOverviewQueryKey() }); }, onError: () => setSaveError('Settings could not be saved. Try again when the service is available.') });
+    update.mutate({ data: payload }, { onSuccess: (result: SafetySettings) => { cache.setQueryData(getGetSafetySettingsQueryKey(), result); setSaveMessage('Safety policies saved. These values do not authorize spending.'); void cache.invalidateQueries({ queryKey: getListLauncherAuditEventsQueryKey() }); void cache.invalidateQueries({ queryKey: getGetLauncherOverviewQueryKey() }); }, onError: () => setSaveError('Settings could not be saved. Try again when the service is available.') });
   };
   const toggleEmergency = () => {
     if (!settings.data) return;
-    update.mutate({ data: { emergencyStop: !settings.data.emergencyStop } }, { onSuccess: result => { cache.setQueryData(getGetSafetySettingsQueryKey(), result); setSaveMessage(result.emergencyStop ? 'Emergency stop engaged.' : 'Emergency stop released.'); void cache.invalidateQueries({ queryKey: getListLauncherAuditEventsQueryKey() }); void cache.invalidateQueries({ queryKey: getGetLauncherOverviewQueryKey() }); }, onError: () => setSaveError('Emergency stop could not be updated. Try again.') });
+    update.mutate({ data: { emergencyStop: !settings.data.emergencyStop } }, { onSuccess: (result: SafetySettings) => { cache.setQueryData(getGetSafetySettingsQueryKey(), result); setSaveMessage(result.emergencyStop ? 'Emergency stop engaged.' : 'Emergency stop released.'); void cache.invalidateQueries({ queryKey: getListLauncherAuditEventsQueryKey() }); void cache.invalidateQueries({ queryKey: getGetLauncherOverviewQueryKey() }); }, onError: () => setSaveError('Emergency stop could not be updated. Try again.') });
   };
   return <AppFrame active="/safety"><div className="page"><div className="page-head"><div><div className="eyebrow">Guardrails / 03</div><h1 className="page-title">Safety controls</h1><p className="page-subtitle">Review policy limits, workspace availability, and recent changes.</p></div><span className="mode-chip"><Shield size={13} />OPERATOR CONTROL</span></div>
     {settings.isLoading ? <div className="stack"><LoadingCard /><LoadingCard /></div> : settings.isError ? <div className="card card-pad"><QueryError retry={() => void settings.refetch()} /></div> : !settings.data ? <div className="card card-pad"><QueryError retry={() => void settings.refetch()} /></div> : <div className="safety-grid">
@@ -299,7 +299,7 @@ function SafetyPage() {
           </form>{saveError && <div className="error-box" role="alert">{saveError}</div>}{saveMessage && <div className="success-box" role="status">{saveMessage}</div>}
         </section>
         <section className="card card-pad"><div className="card-head"><div><div className="eyebrow">Audit trail</div><h2 className="section-title" style={{ marginTop: 8 }}>Recent activity</h2><p className="section-copy">Safety changes and demo actions recorded by the service.</p></div><Activity size={17} color="#83c99d" /></div>
-          {audit.isLoading ? <div style={{ display: 'grid', gap: 14 }}><LoadingCard /></div> : audit.isError ? <QueryError retry={() => void audit.refetch()} /> : audit.data?.length ? audit.data.map(event => <AuditItem key={event.id} event={event} />) : <div className="empty-state"><div className="empty-icon"><FileClock size={18} /></div><h3>No activity recorded</h3><p>Recent safety and demo actions will appear here.</p></div>}
+          {audit.isLoading ? <div style={{ display: 'grid', gap: 14 }}><LoadingCard /></div> : audit.isError ? <QueryError retry={() => void audit.refetch()} /> : audit.data?.length ? audit.data.map((event: AuditEvent) => <AuditItem key={event.id} event={event} />) : <div className="empty-state"><div className="empty-icon"><FileClock size={18} /></div><h3>No activity recorded</h3><p>Recent safety and demo actions will appear here.</p></div>}
         </section>
       </div>
       <div className="stack">
