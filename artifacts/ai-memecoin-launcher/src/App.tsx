@@ -177,7 +177,7 @@ function Dashboard() {
       const response = await fetch('/api/launcher/artwork', {
         method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: token.name, ticker: token.ticker, description: token.description }),
+        body: JSON.stringify({ name: token.name, ticker: token.ticker, description: token.description, artworkSeed: token.artworkSeed }),
       });
       if (!response.ok) throw new Error('Artwork service unavailable');
       const result: unknown = await response.json();
@@ -241,7 +241,7 @@ function Dashboard() {
 }
 
 function RecordItem({ record }: { record: LaunchRecord }) {
-  return <article className="record" data-testid={`record-launch-${record.id}`}><div className="record-art">{record.ticker.slice(0, 2)}</div><div style={{ minWidth: 0 }}><div className="activity-name">{record.name}</div><div className="record-desc">{record.description || 'No description provided.'}</div><div className="record-meta"><span className="mono">${record.ticker}</span><span className="field-hint">Saved {stamp(record.createdAt)}</span></div></div><span className="demo-badge">DEMO ONLY</span></article>;
+  return <article className="record" data-testid={`record-launch-${record.id}`}><div className="record-art" style={{ position: "relative", overflow: "hidden" }}>{record.ticker.slice(0, 2)}<img src={`/api/launcher/launches/${encodeURIComponent(record.id)}/artwork`} alt="" loading="lazy" onError={e => { e.currentTarget.style.display = "none"; }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} /></div><div style={{ minWidth: 0 }}><div className="activity-name">{record.name}</div><div className="record-desc">{record.description || 'No description provided.'}</div><div className="record-meta"><span className="mono">${record.ticker}</span><span className="field-hint">Saved {stamp(record.createdAt)}</span></div></div><span className="demo-badge">DEMO ONLY</span></article>;
 }
 
 function HistoryPage() {
