@@ -28,5 +28,5 @@ export async function persistArtwork(
 export async function loadArtwork(userId: string, artworkSeed: string): Promise<Buffer | null> {
   const result = await client.downloadAsBytes(artworkStorageKey(userId, artworkSeed));
   if (!result.ok) return null;
-  return Buffer.from(result.value);
+  return Buffer.concat(result.value);
 }
