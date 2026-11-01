@@ -32,6 +32,7 @@ import {
 } from "../lib/launcher/launch-engine";
 import { tokenGenerator } from "../lib/launcher/token-generator";
 import { generateTokenArtwork } from "../lib/launcher/artwork-generator";
+import { loadArtwork, persistArtwork } from "../lib/launcher/artwork-storage";
 import { authenticatedRateLimit } from "../middlewares/authenticatedRateLimit";
 
 const router: IRouter = Router();
@@ -158,8 +159,8 @@ router.post("/launcher/generate", authenticatedRateLimit("generate", 10), async 
   }
 });
 
-// Artwork is generated only for an authenticated concept preview. Never persisted
-// or passed to a blockchain adapter. Rate-limited separately from text generation.
+// Generated artwork is saved to private, user-scoped Object Storage.
+// No artwork is ever sent to a blockchain adapter.
 router.post("/launcher/artwork", authenticatedRateLimit("artwork", 3), async (req, res): Promise<void> => {
   const body: unknown = req.body;
   if (!body || typeof body !== "object" || Array.isArray(body)) {
@@ -170,7 +171,8 @@ router.post("/launcher/artwork", authenticatedRateLimit("artwork", 3), async (re
   if (
     typeof input.name !== "string" || input.name.length < 1 || input.name.length > 32 ||
     typeof input.ticker !== "string" || !/^[A-Za-z0-9]{2,10}$/.test(input.ticker) ||
-    typeof input.description !== "string" || input.description.length > 280
+    typeof input.description !== "string" || input.description.length > 280 ||
+    typeof input.artworkSeed !== "string" || input.artworkSeed.length < 1 || input.artworkSeed.length > 64
   ) {
     res.status(400).json({ error: "Invalid artwork request." });
     return;
@@ -179,10 +181,36 @@ router.post("/launcher/artwork", authenticatedRateLimit("artwork", 3), async (re
     const artwork = await generateTokenArtwork({
       name: input.name, ticker: input.ticker, description: input.description,
     });
+    await persistArtwork(userIdFor(req), input.artworkSeed as string, artwork.base64);
     res.setHeader("Cache-Control", "no-store");
     res.json(artwork);
   } catch {
     res.status(502).json({ error: "Artwork generation is temporarily unavailable." });
+  }
+});
+
+// Existing records without generated artwork receive 404 and retain their placeholder.
+// Ownership is checked before reading bytes; never expose the bucket itself.
+router.get("/launcher/launches/:id/artwork", async (req, res): Promise<void> => {
+  const id = req.params.id;
+  if (typeof id !== "string" || !/^[0-9a-f-]{36}$/i.test(id)) {
+    res.status(404).end();
+    return;
+  }
+  const userId = userIdFor(req);
+  const [record] = await db.select({ artworkSeed: launcherLaunchesTable.artworkSeed })
+    .from(launcherLaunchesTable)
+    .where(and(eq(launcherLaunchesTable.id, id), eq(launcherLaunchesTable.userId, userId)))
+    .limit(1);
+  if (!record) { res.status(404).end(); return; }
+  try {
+    const bytes = await loadArtwork(userId, record.artworkSeed);
+    if (!bytes) { res.status(404).end(); return; }
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "private, max-age=300");
+    res.send(bytes);
+  } catch {
+    res.status(502).json({ error: "Artwork is temporarily unavailable." });
   }
 });
 
