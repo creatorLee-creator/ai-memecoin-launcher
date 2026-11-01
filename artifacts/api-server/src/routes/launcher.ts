@@ -193,7 +193,7 @@ router.post("/launcher/artwork", authenticatedRateLimit("artwork", 3), async (re
 // Ownership is checked before reading bytes; never expose the bucket itself.
 router.get("/launcher/launches/:id/artwork", async (req, res): Promise<void> => {
   const id = req.params.id;
-  if (typeof id !== "string" || !/^[0-9a-f-]{36}$/i.test(id)) {
+  if (typeof id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
     res.status(404).end();
     return;
   }
