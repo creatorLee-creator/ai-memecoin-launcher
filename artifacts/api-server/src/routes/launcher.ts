@@ -34,6 +34,7 @@ import { tokenGenerator } from "../lib/launcher/token-generator";
 import { generateTokenArtwork } from "../lib/launcher/artwork-generator";
 import { loadArtwork, persistArtwork } from "../lib/launcher/artwork-storage";
 import { isSolanaPublicKey, readSolanaBalance } from "../lib/launcher/solana-wallet";
+import { preparePumpLaunch } from "../lib/launcher/pump-launch-preflight";
 import { authenticatedRateLimit } from "../middlewares/authenticatedRateLimit";
 
 const router: IRouter = Router();
@@ -229,6 +230,51 @@ router.get("/launcher/launches/:id/artwork", async (req, res): Promise<void> => 
     res.send(bytes);
   } catch {
     res.status(502).json({ error: "Artwork is temporarily unavailable." });
+  }
+});
+
+// Review-only Pump.fun launch preflight. Does not construct, simulate, sign or broadcast.
+router.post("/launcher/pump-preflight", authenticatedRateLimit("pump-preflight", 10), async (req, res): Promise<void> => {
+  const body: unknown = req.body;
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    res.status(400).json({ error: "Invalid preflight request." });
+    return;
+  }
+  const input = body as Record<string, unknown>;
+  if (typeof input.name !== "string" || input.name.length < 1 || input.name.length > 32 ||
+      typeof input.ticker !== "string" || input.ticker.length < 2 || input.ticker.length > 10 ||
+      typeof input.description !== "string" || input.description.length > 280 ||
+      typeof input.artworkSeed !== "string" || input.artworkSeed.length < 1 || input.artworkSeed.length > 64 ||
+      typeof input.creatorAddress !== "string" || input.creatorAddress.length > 44 ||
+      typeof input.initialBuySol !== "number" || !Number.isFinite(input.initialBuySol)) {
+    res.status(400).json({ error: "Invalid preflight request." });
+    return;
+  }
+  const userId = userIdFor(req);
+  try {
+    const [settings, todayCount, artwork] = await Promise.all([
+      getOrCreateSafetySettings(userId),
+      db.select({ value: count() }).from(launcherLaunchesTable).where(and(
+        eq(launcherLaunchesTable.userId, userId),
+        gte(launcherLaunchesTable.createdAt, utcStartOfToday()),
+      )),
+      loadArtwork(userId, input.artworkSeed),
+    ]);
+    const preview = preparePumpLaunch({
+      name: input.name, ticker: input.ticker, description: input.description,
+      artworkSeed: input.artworkSeed, creatorAddress: input.creatorAddress,
+      initialBuySol: input.initialBuySol,
+    }, {
+      emergencyStop: settings.emergencyStop,
+      maxPerLaunchSol: settings.maxPerLaunchSol,
+      dailyLimitSol: settings.dailyLimitSol,
+      dailyLaunchLimit: settings.dailyLaunchLimit,
+      launchesToday: todayCount[0]?.value ?? 0,
+    }, artwork !== null);
+    res.setHeader("Cache-Control", "no-store");
+    res.json(preview);
+  } catch {
+    res.status(502).json({ error: "Launch preflight is temporarily unavailable." });
   }
 });
 

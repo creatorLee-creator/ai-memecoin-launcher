@@ -63,6 +63,33 @@ paths:
           description: Rate limited
         "502":
           description: RPC unavailable
+  /launcher/pump-preflight:
+    post:
+      operationId: previewPumpLaunchReadiness
+      tags: [launcher]
+      summary: Preview Pump.fun launch requirements without any transaction
+      description: Checks concept metadata, stored artwork, creator address, and configured safety policy. Does not build, simulate, sign, or broadcast a transaction. Network and account-rent fees remain unknown until a real transaction is assembled and quoted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PumpPreflightInput"
+      responses:
+        "200":
+          description: Read-only launch readiness checks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PumpPreflightResult"
+        "400":
+          description: Invalid input
+        "401":
+          description: Authentication required
+        "429":
+          description: Rate limited
+        "502":
+          description: Preflight service unavailable
   /launcher/overview:
     get:
       operationId: getLauncherOverview
@@ -249,6 +276,89 @@ components:
           type: string
           enum: [watch_only]
       required: [address, lamports, sol, slot, mode]
+    PumpPreflightInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 32
+        ticker:
+          type: string
+          minLength: 2
+          maxLength: 10
+        description:
+          type: string
+          maxLength: 280
+        artworkSeed:
+          type: string
+          minLength: 1
+          maxLength: 64
+        creatorAddress:
+          type: string
+          maxLength: 44
+        initialBuySol:
+          type: number
+          minimum: 0
+      required: [name, ticker, description, artworkSeed, creatorAddress, initialBuySol]
+    PumpPreflightResult:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [preview_only]
+        protocol:
+          type: string
+          enum: [pump.fun]
+        network:
+          type: string
+          enum: [solana-mainnet]
+        pairing:
+          type: string
+          enum: [SOL]
+        instruction:
+          type: string
+          enum: [create_v2]
+        sdkHint:
+          type: string
+        checks:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              status:
+                type: string
+                enum: [pass, blocked, pending]
+              detail:
+                type: string
+            required: [id, status, detail]
+        blocked:
+          type: boolean
+        nextAction:
+          type: string
+          enum: [resolve_blockers, prepare_metadata]
+        estimatedNetworkFeeSol:
+          type: "null"
+        estimatedAccountRentSol:
+          type: "null"
+        platformCreationFeeSol:
+          type: number
+        initialBuySol:
+          type: number
+        note:
+          type: string
+        transactionBuilt:
+          type: boolean
+          enum: [false]
+        transactionSimulated:
+          type: boolean
+          enum: [false]
+        broadcast:
+          type: boolean
+          enum: [false]
+      required: [mode, protocol, network, pairing, instruction, sdkHint, checks, blocked, nextAction, estimatedNetworkFeeSol, estimatedAccountRentSol, platformCreationFeeSol, initialBuySol, note, transactionBuilt, transactionSimulated, broadcast]
     HealthStatus:
       type: object
       properties:
