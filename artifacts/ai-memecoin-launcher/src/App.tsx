@@ -190,6 +190,21 @@ function WatchOnlyWallet() {
   </section>;
 }
 
+type PumpPreflight = {
+  mode: 'preview_only';
+  protocol: string;
+  blocked: boolean;
+  nextAction: string;
+  initialBuySol: number;
+  estimatedNetworkFeeSol: null;
+  estimatedAccountRentSol: null;
+  platformCreationFeeSol: number;
+  transactionBuilt: false;
+  transactionSimulated: false;
+  broadcast: false;
+  checks: Array<{ id: string; status: 'pass' | 'blocked' | 'pending'; detail: string }>;
+};
+
 function Dashboard() {
   const overview = useGetLauncherOverview({ query: { queryKey: getGetLauncherOverviewQueryKey() } });
   const launches = useListLauncherLaunches({ query: { queryKey: getListLauncherLaunchesQueryKey() } });
@@ -202,6 +217,11 @@ function Dashboard() {
   const [artwork, setArtwork] = useState<string | null>(null);
   const [artworkBusy, setArtworkBusy] = useState(false);
   const [artworkError, setArtworkError] = useState('');
+  const [creatorAddress, setCreatorAddress] = useState('');
+  const [initialBuySol, setInitialBuySol] = useState('0');
+  const [preflight, setPreflight] = useState<PumpPreflight | null>(null);
+  const [preflightError, setPreflightError] = useState('');
+  const [preflightBusy, setPreflightBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const invalidateLaunchData = () => {
@@ -230,8 +250,31 @@ function Dashboard() {
       setArtworkError('Could not generate artwork. Check your API credits and service configuration, then retry.');
     } finally { setArtworkBusy(false); }
   };
+  const reviewPumpLaunch = async () => {
+    if (!token || preflightBusy) return;
+    setPreflightBusy(true); setPreflight(null); setPreflightError('');
+    try {
+      const amount = Number(initialBuySol);
+      if (!initialBuySol.trim() || !Number.isFinite(amount) || amount < 0) throw new Error('Invalid amount');
+      const response = await fetch('/api/launcher/pump-preflight', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: token.name, ticker: token.ticker, description: token.description,
+          artworkSeed: token.artworkSeed, creatorAddress: creatorAddress.trim(), initialBuySol: amount,
+        }),
+      });
+      if (!response.ok) throw new Error('Preflight failed');
+      const body: unknown = await response.json();
+      if (!body || typeof body !== 'object' || (body as { mode?: unknown }).mode !== 'preview_only' ||
+        !Array.isArray((body as { checks?: unknown }).checks)) throw new Error('Invalid preflight response');
+      setPreflight(body as PumpPreflight);
+    } catch {
+      setPreflightError('Could not complete launch preflight. Check the creator address and service, then retry.');
+    } finally { setPreflightBusy(false); }
+  };
   const onGenerate = (event: FormEvent) => {
-    event.preventDefault(); setError(''); setNotice(''); setArtwork(null); setArtworkError('');
+    event.preventDefault(); setError(''); setNotice(''); setArtwork(null); setArtworkError(''); setPreflight(null); setPreflightError('');
     generate.mutate({ data: { name: name.trim(), description: description.trim() } }, {
       onSuccess: (result: GeneratedToken) => { setToken(result); setName(result.name); setDescription(result.description); },
       onError: () => setError('Could not generate sample metadata. Your draft has not been changed.'),
@@ -268,6 +311,30 @@ function Dashboard() {
       <section className="card card-pad"><div className="card-head"><div><div className="eyebrow">Review / 02</div><h2 className="section-title" style={{ marginTop: 8 }}>Preview</h2><p className="section-copy">Review before saving your demo record.</p></div><span className="demo-badge">NOT LIVE</span></div>
         {token ? <><div className="preview-art">{artwork ? <img src={artwork} alt={`AI artwork for ${token.name}`} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 12 }} data-testid="image-token-artwork" /> : <div className="art-mark">{token.ticker.slice(0, 2)}</div>}</div><div className="button-row" style={{ marginTop: 12 }}><button type="button" className="button button-secondary" disabled={artworkBusy || generate.isPending} onClick={() => void onArtwork()} data-testid="button-generate-artwork">{artworkBusy ? "Generating artwork…" : artwork ? "Regenerate AI artwork" : "Generate AI artwork"}</button></div>{artworkError && <div className="error-box" role="alert">{artworkError}</div>}<div className="preview-meta"><div><div className="token-name" data-testid="text-preview-name">{token.name}</div><div className="token-ticker">${token.ticker}</div></div><span className="mono">SAMPLE</span></div><p className="token-description">{token.description}</p>
           <div className="button-row"><button className="button button-primary" onClick={onCreate} disabled={busy || overview.isLoading || overview.isError || !overview.data || overview.data.emergencyStop} data-testid="button-save-demo-launch">{createLaunch.isPending ? 'Saving record…' : overview.data?.emergencyStop ? 'Emergency stop active' : overview.isLoading ? 'Checking workspace…' : 'Save demo launch record'}<ArrowRight size={14} /></button></div>
+          <section className="notice" style={{ marginTop: 18 }} data-testid="pump-preflight">
+            <strong>Pump.fun launch readiness — preview only</strong>
+            <p style={{ marginTop: 8 }}>Inspect launch requirements without building, signing, simulating, or broadcasting a transaction.</p>
+            <div className="field"><label htmlFor="pump-creator">Creator public Solana address</label>
+              <input id="pump-creator" className="input" spellCheck={false} maxLength={44}
+                value={creatorAddress} placeholder="Public address only — never a private key"
+                onChange={e => { setCreatorAddress(e.target.value); setPreflight(null); }} /></div>
+            <div className="field"><label htmlFor="pump-buy">Optional initial self-buy (SOL, default 0)</label>
+              <input id="pump-buy" className="input" type="number" min="0" max="100" step="0.001"
+                value={initialBuySol} onChange={e => { setInitialBuySol(e.target.value); setPreflight(null); }} /></div>
+            <button type="button" className="button button-secondary" onClick={() => void reviewPumpLaunch()}
+              disabled={preflightBusy} data-testid="button-pump-preflight">
+              {preflightBusy ? 'Checking requirements…' : 'Review launch readiness'}
+            </button>
+            {preflightError && <div className="error-box" role="alert">{preflightError}</div>}
+            {preflight && <div style={{ marginTop: 14 }} data-testid="pump-preflight-results">
+              <strong>{preflight.blocked ? 'Requirements blocked' : 'Preliminary checks passed'}</strong>
+              <p className="field-hint">Network fees and account rent not yet estimated. Platform creation fee: 0 SOL. Transaction not simulated.</p>
+              {preflight.checks.map(check => <div key={check.id} className="record-meta" style={{ marginTop: 8 }}>
+                <span className="mono">{check.status.toUpperCase()}</span>
+                <span>{check.detail}</span>
+              </div>)}
+            </div>}
+          </section>
           <div className="field-hint" style={{ marginTop: 10 }}>Saved records have no contract address and no transaction signature.</div>
         </> : <div className="empty-state"><div className="empty-icon"><Layers3 size={19} /></div><h3>Your review appears here</h3><p>Generate a sample concept to inspect its name, ticker, description, and placeholder artwork.</p></div>}
       </section>
