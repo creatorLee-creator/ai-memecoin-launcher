@@ -3,7 +3,7 @@
  * Does NOT build, simulate, sign or broadcast a transaction.
  * Fee amounts cannot be trusted without a constructed transaction and RPC.
  */
-import { isSolanaPublicKey } from "./solana-wallet";
+import { isSolanaPublicKey } from "./solana-wallet.ts";
 
 export type PumpLaunchInput = {
   name: string;
