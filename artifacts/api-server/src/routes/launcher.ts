@@ -33,6 +33,7 @@ import {
 import { tokenGenerator } from "../lib/launcher/token-generator";
 import { generateTokenArtwork } from "../lib/launcher/artwork-generator";
 import { loadArtwork, persistArtwork } from "../lib/launcher/artwork-storage";
+import { isSolanaPublicKey, readSolanaBalance } from "../lib/launcher/solana-wallet";
 import { authenticatedRateLimit } from "../middlewares/authenticatedRateLimit";
 
 const router: IRouter = Router();
@@ -116,6 +117,23 @@ router.get("/launcher/overview", async (req, res): Promise<void> => {
       pumpFunStatus: pumpFunLaunchAdapter.status,
     }),
   );
+});
+
+
+// Watch-only wallet checks: no keys, signing, wallet creation, or broadcast.
+router.get("/launcher/wallet-balance/:address", authenticatedRateLimit("wallet-balance", 12), async (req, res): Promise<void> => {
+  const address = req.params.address;
+  if (typeof address !== "string" || !isSolanaPublicKey(address)) {
+    res.status(400).json({ error: "Enter a valid Solana public wallet address." });
+    return;
+  }
+  try {
+    const balance = await readSolanaBalance(address);
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ ...balance, mode: "watch_only" });
+  } catch {
+    res.status(502).json({ error: "Unable to retrieve the Solana balance right now." });
+  }
 });
 
 router.get("/launcher/launches", async (req, res): Promise<void> => {
