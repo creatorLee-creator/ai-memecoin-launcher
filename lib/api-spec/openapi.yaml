@@ -26,6 +26,43 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /launcher/wallet-balance/{address}:
+    get:
+      operationId: getWatchOnlyWalletBalance
+      tags: [launcher]
+      summary: Inspect a Solana public address balance (read-only)
+      description: Reads a confirmed SOL balance using server-side RPC. Does not create, connect, sign with, fund, or control a wallet.
+      parameters:
+        - in: path
+          name: address
+          required: true
+          schema:
+            type: string
+            minLength: 32
+            maxLength: 44
+      responses:
+        "200":
+          description: Confirmed watch-only balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatchOnlyWalletBalance"
+        "400":
+          description: Invalid public address
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limited
+        "502":
+          description: RPC unavailable
   /launcher/overview:
     get:
       operationId: getLauncherOverview
@@ -194,6 +231,24 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
+    WatchOnlyWalletBalance:
+      type: object
+      properties:
+        address:
+          type: string
+        lamports:
+          type: integer
+          minimum: 0
+        sol:
+          type: number
+          minimum: 0
+        slot:
+          type: integer
+          minimum: 0
+        mode:
+          type: string
+          enum: [watch_only]
+      required: [address, lamports, sol, slot, mode]
     HealthStatus:
       type: object
       properties:

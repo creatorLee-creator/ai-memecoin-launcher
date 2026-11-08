@@ -9,7 +9,12 @@ export function artworkStorageKey(userId: string, artworkSeed: string): string {
   return `launcher-artwork/${user}/${seed}.png`;
 }
 
-const client = new Client();
+// Avoid initializing the Replit storage client at module import time.
+// Pure key-generation tests must not require cloud credentials or network access.
+let storageClient: Client | undefined;
+function getStorageClient(): Client {
+  return storageClient ??= new Client();
+}
 
 export async function persistArtwork(
   userId: string,
@@ -21,12 +26,12 @@ export async function persistArtwork(
       !bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
     throw new Error("Invalid PNG artwork.");
   }
-  const result = await client.uploadFromBytes(artworkStorageKey(userId, artworkSeed), bytes);
+  const result = await getStorageClient().uploadFromBytes(artworkStorageKey(userId, artworkSeed), bytes);
   if (!result.ok) throw new Error("Unable to persist artwork.");
 }
 
 export async function loadArtwork(userId: string, artworkSeed: string): Promise<Buffer | null> {
-  const result = await client.downloadAsBytes(artworkStorageKey(userId, artworkSeed));
+  const result = await getStorageClient().downloadAsBytes(artworkStorageKey(userId, artworkSeed));
   if (!result.ok) return null;
   return Buffer.concat(result.value);
 }

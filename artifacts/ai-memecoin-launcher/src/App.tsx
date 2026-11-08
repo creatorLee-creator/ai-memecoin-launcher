@@ -151,6 +151,45 @@ function RequireAuth({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+function WatchOnlyWallet() {
+  const [address, setAddress] = useState('');
+  const [balance, setBalance] = useState<{ address: string; sol: number; slot: number } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const check = async (event: FormEvent) => {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true); setError(''); setBalance(null);
+    try {
+      const response = await fetch('/api/launcher/wallet-balance/' + encodeURIComponent(address.trim()), {
+        credentials: 'same-origin', headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) throw new Error('Could not check the address or retrieve its balance.');
+      const data: unknown = await response.json();
+      if (!data || typeof data !== 'object' || typeof (data as { sol?: unknown }).sol !== 'number' ||
+          (data as { mode?: unknown }).mode !== 'watch_only') throw new Error('Unexpected wallet response.');
+      setBalance(data as { address: string; sol: number; slot: number });
+    } catch {
+      setError('Balance check unavailable. Verify the public address and RPC service, then retry.');
+    } finally { setBusy(false); }
+  };
+  return <section className="card card-pad" style={{ marginTop: 18 }} data-testid="watch-only-wallet">
+    <div className="card-head"><div><div className="eyebrow">Solana / watch-only</div>
+      <h2 className="section-title" style={{ marginTop: 8 }}>Inspect a Solana wallet</h2>
+      <p className="section-copy">Paste a public wallet address to inspect its balance. No private key or signing access.</p></div><Wallet size={19} /></div>
+    <form onSubmit={e => void check(e)}><div className="field"><label htmlFor="watch-address">Public Solana address</label>
+      <input id="watch-address" className="input" value={address} onChange={e => { setAddress(e.target.value); setBalance(null); setError(''); }}
+        autoComplete="off" spellCheck={false} maxLength={44} placeholder="Paste public address (not seed phrase)" data-testid="watch-wallet-address" /></div>
+      <button className="button button-secondary" type="submit" disabled={busy || address.trim().length < 32} data-testid="watch-wallet-check">
+        {busy ? 'Checking balance…' : 'Check SOL balance'}<RefreshCw size={14} /></button></form>
+    {balance && <div className="success-box" role="status" data-testid="watch-wallet-balance">
+      Confirmed balance: <strong>{balance.sol.toLocaleString(undefined, { maximumFractionDigits: 9 })} SOL</strong>
+      <div className="field-hint">Observed at slot {balance.slot.toLocaleString()}. Read-only. Not a connected signing wallet.</div>
+    </div>}
+    {error && <div className="error-box" role="alert">{error}</div>}
+  </section>;
+}
+
 function Dashboard() {
   const overview = useGetLauncherOverview({ query: { queryKey: getGetLauncherOverviewQueryKey() } });
   const launches = useListLauncherLaunches({ query: { queryKey: getListLauncherLaunchesQueryKey() } });
@@ -216,6 +255,7 @@ function Dashboard() {
         <div className="metric"><div className="metric-label">Wallet balance</div><div className="metric-value">0 <span style={{ fontSize: 13, color: '#87978e' }}>SOL</span></div><div className="metric-detail">Wallet not created</div></div>
       </>}
     </div>
+    <WatchOnlyWallet />
     <div className="dashboard-grid">
       <section className="card card-pad"><div className="card-head"><div><div className="eyebrow">Drafting / 01</div><h2 className="section-title" style={{ marginTop: 8 }}>Create a token concept</h2><p className="section-copy">Generate token metadata, then optionally request original AI artwork.</p></div><div className="brand-mark"><Sparkles size={16} /></div></div>
         <form onSubmit={onGenerate}><div className="field"><label htmlFor="token-name">Concept name</label><input id="token-name" className="input" data-testid="input-token-name" required maxLength={32} placeholder="e.g. Moss Signal" value={name} onChange={e => setName(e.target.value)} /></div>
