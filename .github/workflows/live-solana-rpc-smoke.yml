@@ -1,0 +1,28 @@
+name: Live Solana RPC simulation smoke
+on:
+  push:
+    branches: [feature/live-rpc-simulation-smoke]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mainnet-simulation-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Call live Solana RPC (no signing, no broadcast)
+        env:
+          RUN_LIVE_SOLANA_RPC: '1'
+        run: node --experimental-strip-types artifacts/api-server/tests/live-solana-rpc-smoke.mts
