@@ -63,6 +63,35 @@ paths:
           description: Rate limited
         "502":
           description: RPC unavailable
+  /launcher/pump-simulate:
+    post:
+      operationId: simulatePumpCreateV2WatchOnly
+      tags: [launcher]
+      summary: Simulate a Pump.fun create_v2 transaction without signatures or broadcast
+      description: Authenticated and rate-limited. Requires public creator and payer addresses and a pre-published IPFS metadata URI. Inspects payer balance, assembles an ephemeral unsigned transaction, and requests only Solana RPC simulation and fee inspection. The initial self-buy is excluded. No launch is deployed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PumpSimulationInput"
+      responses:
+        "200":
+          description: Read-only simulation response, which may report on-chain program failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PumpSimulationResult"
+        "400":
+          description: Invalid public address or metadata URL
+        "401":
+          description: Authentication required
+        "403":
+          description: Emergency stop is active
+        "429":
+          description: Rate limit reached
+        "502":
+          description: RPC or wallet inspection failure
   /launcher/pump-preflight:
     post:
       operationId: previewPumpLaunchReadiness
@@ -276,6 +305,73 @@ components:
           type: string
           enum: [watch_only]
       required: [address, lamports, sol, slot, mode]
+    PumpSimulationInput:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 32
+        symbol:
+          type: string
+          minLength: 2
+          maxLength: 10
+        creatorAddress:
+          type: string
+          minLength: 32
+          maxLength: 44
+        payerAddress:
+          type: string
+          minLength: 32
+          maxLength: 44
+        metadataUri:
+          type: string
+          maxLength: 200
+      required: [name, symbol, creatorAddress, payerAddress, metadataUri]
+    PumpSimulationResult:
+      type: object
+      description: Non-broadcasting simulation report; includes report fields and wallet diagnostics.
+      properties:
+        mode:
+          type: string
+          enum: [unsigned_simulation_only]
+        payerBalanceSol:
+          type: number
+        payerBalanceLamports:
+          type: integer
+        feePayerFunded:
+          type: boolean
+        feePayerNote:
+          type: string
+        initialSelfBuyIncluded:
+          type: boolean
+          enum: [false]
+        signed:
+          type: boolean
+          enum: [false]
+        broadcast:
+          type: boolean
+          enum: [false]
+        wireSizeBytes:
+          type: integer
+        requiredSignatures:
+          type: integer
+        simulation:
+          type: object
+          properties:
+            simulationOk:
+              type: boolean
+            error:
+              type: [string, "null"]
+            unitsConsumed:
+              type: [integer, "null"]
+            baseFeeSol:
+              type: [number, "null"]
+            baseFeeLamports:
+              type: [integer, "null"]
+          required: [simulationOk, error, unitsConsumed, baseFeeSol, baseFeeLamports]
+      required: [mode, payerBalanceSol, payerBalanceLamports, feePayerFunded, feePayerNote, initialSelfBuyIncluded, signed, broadcast, wireSizeBytes, requiredSignatures, simulation]
     PumpPreflightInput:
       type: object
       properties:
