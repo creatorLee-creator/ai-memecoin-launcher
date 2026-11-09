@@ -35,6 +35,7 @@ import { generateTokenArtwork } from "../lib/launcher/artwork-generator";
 import { loadArtwork, persistArtwork } from "../lib/launcher/artwork-storage";
 import { isSolanaPublicKey, readSolanaBalance } from "../lib/launcher/solana-wallet";
 import { preparePumpLaunch } from "../lib/launcher/pump-launch-preflight";
+import { simulatePumpCreateV2 } from "../lib/launcher/pump-create-v2-simulation";
 import { authenticatedRateLimit } from "../middlewares/authenticatedRateLimit";
 
 const router: IRouter = Router();
@@ -234,6 +235,57 @@ router.get("/launcher/launches/:id/artwork", async (req, res): Promise<void> => 
 });
 
 // Review-only Pump.fun launch preflight. Does not construct, simulate, sign or broadcast.
+// Simulation-only: never accepts private keys, transaction bytes, arbitrary RPC URLs
+// or spending commands. No signing or broadcast method is available.
+router.post("/launcher/pump-simulate", authenticatedRateLimit("pump-simulate", 3), async (req, res): Promise<void> => {
+  const body: unknown = req.body;
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    res.status(400).json({ error: "Invalid simulation request." });
+    return;
+  }
+  const fields = body as Record<string, unknown>;
+  if (Object.keys(fields).some(key =>
+      !["name", "symbol", "creatorAddress", "payerAddress", "metadataUri"].includes(key)) ||
+      typeof fields.name !== "string" || fields.name.length < 1 || fields.name.length > 32 ||
+      typeof fields.symbol !== "string" || !/^[A-Za-z0-9]{2,10}$/.test(fields.symbol) ||
+      typeof fields.creatorAddress !== "string" || !isSolanaPublicKey(fields.creatorAddress) ||
+      typeof fields.payerAddress !== "string" || !isSolanaPublicKey(fields.payerAddress) ||
+      typeof fields.metadataUri !== "string" || fields.metadataUri.length > 200 ||
+      !/^https:\/\/ipfs\.io\/ipfs\/[a-zA-Z0-9]+$/.test(fields.metadataUri)) {
+    res.status(400).json({ error: "Invalid public simulation fields. Use a public IPFS metadata URL." });
+    return;
+  }
+  try {
+    const settings = await getOrCreateSafetySettings(userIdFor(req));
+    if (settings.emergencyStop) {
+      res.status(403).json({ error: "Emergency stop is active." });
+      return;
+    }
+    // Confirm that the supplied address is a watch-only account. Checking
+    // its balance costs no SOL and does not authorize any future spending.
+    const payer = await readSolanaBalance(fields.payerAddress);
+    const result = await simulatePumpCreateV2({
+      name: fields.name, symbol: fields.symbol,
+      creator: fields.creatorAddress, user: fields.payerAddress,
+      metadataUri: fields.metadataUri,
+    });
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      ...result,
+      payerBalanceSol: payer.sol,
+      payerBalanceLamports: payer.lamports,
+      feePayerFunded: payer.lamports > 0,
+      feePayerNote: payer.lamports === 0
+        ? "Fee payer is unfunded; InvalidAccountForFee may occur."
+        : "Nonzero balance does not guarantee transaction fee or rent affordability.",
+      // Self-buy remains excluded from this create_v2-only simulation.
+      initialSelfBuyIncluded: false,
+    });
+  } catch {
+    res.status(502).json({ error: "Unable to check wallet and simulate the unsigned launch." });
+  }
+});
+
 router.post("/launcher/pump-preflight", authenticatedRateLimit("pump-preflight", 10), async (req, res): Promise<void> => {
   const body: unknown = req.body;
   if (!body || typeof body !== "object" || Array.isArray(body)) {
