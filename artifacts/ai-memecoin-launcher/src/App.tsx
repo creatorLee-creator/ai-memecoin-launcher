@@ -205,6 +205,25 @@ type PumpPreflight = {
   checks: Array<{ id: string; status: 'pass' | 'blocked' | 'pending'; detail: string }>;
 };
 
+type PumpSimulationView = {
+  mode: 'unsigned_simulation_only';
+  signed: false;
+  broadcast: false;
+  wireSizeBytes: number;
+  requiredSignatures: number;
+  payerBalanceSol: number;
+  feePayerFunded: boolean;
+  feePayerNote: string;
+  initialSelfBuyIncluded: false;
+  simulation: {
+    simulationOk: boolean;
+    error: string | null;
+    unitsConsumed: number | null;
+    baseFeeSol: number | null;
+    feeAvailability: 'quoted' | 'unavailable';
+  };
+};
+
 function Dashboard() {
   const overview = useGetLauncherOverview({ query: { queryKey: getGetLauncherOverviewQueryKey() } });
   const launches = useListLauncherLaunches({ query: { queryKey: getListLauncherLaunchesQueryKey() } });
@@ -222,6 +241,11 @@ function Dashboard() {
   const [preflight, setPreflight] = useState<PumpPreflight | null>(null);
   const [preflightError, setPreflightError] = useState('');
   const [preflightBusy, setPreflightBusy] = useState(false);
+  const [simPayer, setSimPayer] = useState('');
+  const [simMetadataUri, setSimMetadataUri] = useState('');
+  const [simResult, setSimResult] = useState<PumpSimulationView | null>(null);
+  const [simError, setSimError] = useState('');
+  const [simBusy, setSimBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const invalidateLaunchData = () => {
@@ -273,8 +297,34 @@ function Dashboard() {
       setPreflightError('Could not complete launch preflight. Check the creator address and service, then retry.');
     } finally { setPreflightBusy(false); }
   };
+  const runPumpSimulation = async () => {
+    if (!token || simBusy) return;
+    setSimBusy(true); setSimResult(null); setSimError('');
+    try {
+      const response = await fetch('/api/launcher/pump-simulate', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: token.name, symbol: token.ticker,
+          creatorAddress: creatorAddress.trim(),
+          payerAddress: simPayer.trim(), metadataUri: simMetadataUri.trim(),
+        }),
+      });
+      if (!response.ok) throw new Error('Simulation unavailable');
+      const body: unknown = await response.json();
+      if (!body || typeof body !== 'object' ||
+        (body as { mode?: unknown }).mode !== 'unsigned_simulation_only' ||
+        (body as { broadcast?: unknown }).broadcast !== false ||
+        (body as { signed?: unknown }).signed !== false) {
+        throw new Error('Unexpected simulation response');
+      }
+      setSimResult(body as PumpSimulationView);
+    } catch {
+      setSimError('Simulation could not be completed. Check your public addresses, IPFS URI and RPC connectivity.');
+    } finally { setSimBusy(false); }
+  };
   const onGenerate = (event: FormEvent) => {
-    event.preventDefault(); setError(''); setNotice(''); setArtwork(null); setArtworkError(''); setPreflight(null); setPreflightError('');
+    event.preventDefault(); setError(''); setNotice(''); setArtwork(null); setArtworkError(''); setPreflight(null); setPreflightError(''); setSimResult(null); setSimError('');
     generate.mutate({ data: { name: name.trim(), description: description.trim() } }, {
       onSuccess: (result: GeneratedToken) => { setToken(result); setName(result.name); setDescription(result.description); },
       onError: () => setError('Could not generate sample metadata. Your draft has not been changed.'),
@@ -333,6 +383,32 @@ function Dashboard() {
                 <span className="mono">{check.status.toUpperCase()}</span>
                 <span>{check.detail}</span>
               </div>)}
+            </div>}
+          </section>
+          <section className="notice" style={{ marginTop: 18 }} data-testid="pump-simulation">
+            <strong>Live Solana transaction simulation — no spending</strong>
+            <p style={{ marginTop: 8 }}>Uses the generated concept and creator address above. Enter a public fee-payer address and an already published IPFS metadata URI. Nothing will be signed or launched.</p>
+            <div className="field"><label htmlFor="sim-payer">Fee payer public Solana address</label>
+              <input id="sim-payer" className="input" spellCheck={false} maxLength={44}
+                placeholder="Public address only — no seed phrase"
+                value={simPayer} onChange={e => { setSimPayer(e.target.value); setSimResult(null); }} /></div>
+            <div className="field"><label htmlFor="sim-uri">Published IPFS metadata URL</label>
+              <input id="sim-uri" className="input" spellCheck={false} maxLength={200}
+                placeholder="https://ipfs.io/ipfs/..."
+                value={simMetadataUri} onChange={e => { setSimMetadataUri(e.target.value); setSimResult(null); }} /></div>
+            <button className="button button-secondary" type="button" onClick={() => void runPumpSimulation()}
+              disabled={simBusy || overview.data?.emergencyStop === true || !creatorAddress.trim() || !simPayer.trim() || !simMetadataUri.trim()}
+              data-testid="button-pump-simulate">{simBusy ? 'Contacting Solana RPC…' : 'Simulate unsigned launch'}</button>
+            {simError && <div className="error-box" role="alert">{simError}</div>}
+            {simResult && <div style={{ marginTop: 12 }} data-testid="pump-simulation-results">
+              <strong>{simResult.simulation.simulationOk ? 'RPC simulation returned no program error' : 'RPC simulation blocked'}</strong>
+              <div className="record-meta" style={{ marginTop: 8 }}>Fee payer: {simResult.payerBalanceSol.toLocaleString(undefined, { maximumFractionDigits: 9 })} SOL</div>
+              <div className="field-hint">{simResult.feePayerNote}</div>
+              <div className="record-meta" style={{ marginTop: 8 }}>Base fee: {simResult.simulation.baseFeeSol === null ? 'Unavailable' : simResult.simulation.baseFeeSol + ' SOL'}</div>
+              <div className="record-meta" style={{ marginTop: 8 }}>Compute units: {simResult.simulation.unitsConsumed === null ? 'Unavailable' : simResult.simulation.unitsConsumed.toLocaleString()}</div>
+              <div className="record-meta" style={{ marginTop: 8 }}>Size: {simResult.wireSizeBytes} bytes · Signature slots: {simResult.requiredSignatures}</div>
+              {simResult.simulation.error && <div className="error-box" role="status">Solana returned: {simResult.simulation.error}</div>}
+              <p className="field-hint">Base fee excludes rent, priority fee and optional self-buy. Metadata content was not verified. This simulation never signs or broadcasts and does not launch a token.</p>
             </div>}
           </section>
           <div className="field-hint" style={{ marginTop: 10 }}>Saved records have no contract address and no transaction signature.</div>
