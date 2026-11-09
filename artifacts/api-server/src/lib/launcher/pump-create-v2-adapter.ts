@@ -5,7 +5,7 @@
  * injected adapter once dependency versions and a transaction serializer are
  * locked and tested. This module does not claim to serialize a transaction.
  */
-import { isSolanaPublicKey } from "./solana-wallet";
+import { isSolanaPublicKey } from "./solana-wallet.ts";
 
 export type CreateV2Params = {
   mint: string;
