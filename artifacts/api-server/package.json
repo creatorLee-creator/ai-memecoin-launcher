@@ -22,7 +22,9 @@
     "express": "^5.3.0",
     "http-proxy-middleware": "^4.2.0",
     "pino": "^9.14.0",
-    "pino-http": "^10.5.0"
+    "pino-http": "^10.5.0",
+    "@pump-fun/pump-sdk": "4.3.1",
+    "@solana/web3.js": "^1.98.0"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",
