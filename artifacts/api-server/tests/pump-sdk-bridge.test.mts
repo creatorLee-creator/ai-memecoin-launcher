@@ -8,7 +8,7 @@ const creator = "Stake11111111111111111111111111111111111111";
 const p: CreateV2Params = { mint, user, creator, name: "Moon Cat", symbol: "MCAT",
  uri: "https://ipfs.io/ipfs/bafkreicnu2aqjkoglrlrd65giwo4l64pdajxffk6jtq2vb7yaiopc3yu7m",
  mayhemMode: false, cashback: false, holderReward: false };
-class FakePublicKey { constructor(private value: string) {} toBase58() { return this.value; } }
+class FakePublicKey { value: string; constructor(value: string) { this.value = value; } toBase58() { return this.value; } }
 test("bridges public key objects, preserves 16 ordered SDK keys and rejects sign/broadcast paths", async () => {
   let input: unknown;
   const sdk = {
