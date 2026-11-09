@@ -2,6 +2,7 @@ name: Live Solana RPC simulation smoke
 on:
   push:
     branches: [feature/live-rpc-simulation-smoke]
+  pull_request:
   workflow_dispatch:
 
 permissions:
